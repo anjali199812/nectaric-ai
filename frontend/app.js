@@ -1,4 +1,99 @@
 let positionChart = null;
+let suggestionIndex = -1;
+let suggestionItems = [];
+let autocompleteDebounce = null;
+
+function getCurrentSearchToken(fullText) {
+  const parts = fullText.split(",");
+  return parts[parts.length - 1].trim();
+}
+
+function replaceCurrentToken(fullText, replacement) {
+  const parts = fullText.split(",");
+  parts[parts.length - 1] = " " + replacement;
+  return parts.map((p, i) => (i === 0 ? p.trim() : p)).join(", ").replace(/^,/, "");
+}
+
+function hideSuggestions() {
+  const box = document.getElementById("tickerSuggestions");
+  if (!box) return;
+  box.style.display = "none";
+  box.innerHTML = "";
+  suggestionItems = [];
+  suggestionIndex = -1;
+}
+
+function renderSuggestions(results) {
+  const box = document.getElementById("tickerSuggestions");
+  if (!box) return;
+
+  if (!results || results.length === 0) {
+    hideSuggestions();
+    return;
+  }
+
+  suggestionItems = results;
+  suggestionIndex = -1;
+
+  box.innerHTML = results.map((item, idx) => `
+    <div class="suggestion-item" data-index="${idx}">
+      <div class="suggestion-symbol">${item.symbol}</div>
+      <div class="suggestion-name">${item.name || ""}</div>
+      <div class="suggestion-meta">${item.exchange || "Unknown exchange"}</div>
+    </div>
+  `).join("");
+
+  box.style.display = "block";
+
+  box.querySelectorAll(".suggestion-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const idx = Number(el.dataset.index);
+      selectSuggestion(idx);
+    });
+  });
+}
+
+function highlightSuggestion() {
+  const box = document.getElementById("tickerSuggestions");
+  if (!box) return;
+  const nodes = box.querySelectorAll(".suggestion-item");
+  nodes.forEach((n, idx) => {
+    n.classList.toggle("active", idx === suggestionIndex);
+  });
+}
+
+function selectSuggestion(index) {
+  if (index < 0 || index >= suggestionItems.length) return;
+
+  const input = document.getElementById("tickers");
+  if (!input) return;
+
+  const selected = suggestionItems[index];
+  input.value = replaceCurrentToken(input.value, selected.symbol);
+  hideSuggestions();
+  input.focus();
+}
+
+async function fetchSuggestions(query) {
+  if (!query || query.length < 2) {
+    hideSuggestions();
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/search_symbols?query=${encodeURIComponent(query)}&max_results=8`);
+    if (!resp.ok) {
+      hideSuggestions();
+      return;
+    }
+
+    const data = await resp.json();
+    renderSuggestions(data.results || []);
+  } catch (err) {
+    console.error("Suggestion fetch failed:", err);
+    hideSuggestions();
+  }
+}
 
 function showError(msg) {
   console.error(msg);
@@ -292,4 +387,45 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   checkHealth();
   clearDetails();
+
+  const tickerInput = document.getElementById("tickers");
+const suggestionsBox = document.getElementById("tickerSuggestions");
+
+if (tickerInput) {
+  tickerInput.addEventListener("input", () => {
+    const token = getCurrentSearchToken(tickerInput.value);
+
+    clearTimeout(autocompleteDebounce);
+    autocompleteDebounce = setTimeout(() => {
+      fetchSuggestions(token);
+    }, 250);
+  });
+
+  tickerInput.addEventListener("keydown", (e) => {
+    if (!suggestionItems.length) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      suggestionIndex = Math.min(suggestionIndex + 1, suggestionItems.length - 1);
+      highlightSuggestion();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      suggestionIndex = Math.max(suggestionIndex - 1, 0);
+      highlightSuggestion();
+    } else if (e.key === "Enter") {
+      if (suggestionIndex >= 0) {
+        e.preventDefault();
+        selectSuggestion(suggestionIndex);
+      }
+    } else if (e.key === "Escape") {
+      hideSuggestions();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!tickerInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+      hideSuggestions();
+    }
+  });
+}
 });

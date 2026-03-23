@@ -1,5 +1,3 @@
-# nectaric_core/symbol_resolver.py
-
 from typing import Dict, List, Any
 import re
 import yfinance as yf
@@ -8,34 +6,82 @@ import yfinance as yf
 NASDAQ_HINTS = {"nms", "nasdaq", "nasdaqgs", "nasdaqgm", "nasdaqcm"}
 GOOD_TYPES = {"equity", "stock"}
 
+EXCHANGE_LABELS = {
+    "NMS": "NASDAQ",
+    "NASDAQ": "NASDAQ",
+    "NASDAQGS": "NASDAQ",
+    "NASDAQGM": "NASDAQ",
+    "NASDAQCM": "NASDAQ",
+    "NYQ": "NYSE",
+    "NYSE": "NYSE",
+    "ASE": "NYSE American",
+    "PCX": "NYSE Arca",
+}
+
 
 def normalize_query(q: str) -> str:
     return " ".join(q.strip().split())
 
 
+def normalize_exchange_label(exchange: str | None) -> str | None:
+    if not exchange:
+        return exchange
+    ex = str(exchange).upper()
+    return EXCHANGE_LABELS.get(ex, exchange)
+
+
 def looks_like_ticker(text: str) -> bool:
+    """
+    Treat as ticker only if the user entered something that already
+    looks like a market symbol, e.g. AMZN, NVDA, BRK.B, RIO.AX
+
+    This avoids misclassifying normal company names like 'Amazon'
+    as ticker 'AMAZON'.
+    """
     raw = text.strip()
 
-    if not raw or " " in raw:
+    if not raw:
         return False
 
-    # If it's alphabetic and longer than 5, it's probably a company name
-    # e.g. amazon, microsoft
-    if raw.isalpha() and len(raw) > 5:
+    if " " in raw:
         return False
 
-    # Accept short ticker-like strings
-    return bool(re.fullmatch(r"[A-Za-z.\-]{1,8}", raw))
+    if raw != raw.upper():
+        return False
+
+    return bool(re.fullmatch(r"[A-Z.\-]{1,8}", raw))
+
+
+def build_search_queries(query: str) -> List[str]:
+    """
+    Build a few search variants so broad names like 'Amazon'
+    are easier to resolve correctly.
+    """
+    q = normalize_query(query)
+    variants = [q]
+
+    if "stock" not in q.lower():
+        variants.append(f"{q} stock")
+    if "inc" not in q.lower():
+        variants.append(f"{q} inc")
+    if "corporation" not in q.lower():
+        variants.append(f"{q} corporation")
+    if "company" not in q.lower() and "co" not in q.lower():
+        variants.append(f"{q} company")
+
+    seen = set()
+    out = []
+    for v in variants:
+        key = v.lower()
+        if key not in seen:
+            out.append(v)
+            seen.add(key)
+    return out
 
 
 def score_quote_match(item: Dict[str, Any], query: str) -> float:
     """
     Rank search results. Higher score = better match.
-    Prefers:
-    - common stocks/equities
-    - NASDAQ listings
-    - exact/close symbol match
-    - exact/close company-name match
     """
     symbol = (item.get("symbol") or "").upper()
     shortname = (item.get("shortname") or "").lower()
@@ -46,7 +92,6 @@ def score_quote_match(item: Dict[str, Any], query: str) -> float:
     q = query.lower().strip()
     score = 0.0
 
-    # Prefer common stocks
     if quote_type in GOOD_TYPES:
         score += 4.0
     elif quote_type == "etf":
@@ -54,40 +99,42 @@ def score_quote_match(item: Dict[str, Any], query: str) -> float:
     else:
         score -= 2.0
 
-    # Prefer NASDAQ when ambiguous
     if exchange in NASDAQ_HINTS or "nasdaq" in exchange:
         score += 3.0
 
-    # Exact symbol match
     if q.upper() == symbol:
         score += 12.0
 
-    # Exact company-name match
     if q == shortname:
-        score += 10.0
+        score += 12.0
     if q == longname:
-        score += 10.0
+        score += 12.0
 
-    # Partial name match
+    if shortname.startswith(q):
+        score += 8.0
+    if longname.startswith(q):
+        score += 8.0
+
     if q in shortname:
-        score += 6.0
+        score += 5.0
     if q in longname:
-        score += 6.0
+        score += 5.0
 
-    # Word overlap bonus
     q_words = set(q.split())
     name_words = set((shortname + " " + longname).split())
     overlap = len(q_words.intersection(name_words))
     score += overlap * 1.5
 
-    # Small penalty if names are missing
+    if q in name_words:
+        score += 4.0
+
     if not shortname and not longname:
         score -= 1.0
 
     return score
 
 
-def search_quotes(query: str, max_results: int = 15) -> List[Dict[str, Any]]:
+def search_quotes_once(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
     try:
         search = yf.Search(query, max_results=max_results)
         return search.quotes or []
@@ -95,54 +142,66 @@ def search_quotes(query: str, max_results: int = 15) -> List[Dict[str, Any]]:
         return []
 
 
+def gather_ranked_candidates(query: str) -> List[Dict[str, Any]]:
+    """
+    Search using several query variants, merge unique symbols,
+    and rank them together.
+    """
+    ranked: List[Dict[str, Any]] = []
+    seen_symbols = set()
+
+    for variant in build_search_queries(query):
+        quotes = search_quotes_once(variant, max_results=10)
+
+        for item in quotes:
+            symbol = item.get("symbol")
+            if not symbol:
+                continue
+
+            symbol_u = symbol.upper()
+            if symbol_u in seen_symbols:
+                continue
+            seen_symbols.add(symbol_u)
+
+            ranked.append(
+                {
+                    "input": query,
+                    "symbol": symbol_u,
+                    "name": item.get("shortname") or item.get("longname") or symbol_u,
+                    "quote_type": item.get("quoteType"),
+                    "exchange": normalize_exchange_label(
+                        item.get("exchange") or item.get("fullExchangeName")
+                    ),
+                    "source": "search",
+                    "_score": score_quote_match(item, normalize_query(query)),
+                }
+            )
+
+    ranked.sort(key=lambda x: x["_score"], reverse=True)
+    return ranked
+
+
 def resolve_symbol(query: str) -> Dict[str, Any]:
     """
     Resolve a user input to the most likely ticker.
-    Supports:
-    - ticker symbols
-    - organization/company names
-    - partial names
-
-    No aliases used.
     """
     q = normalize_query(query)
     if not q:
         raise ValueError("Empty ticker/company name provided.")
 
-    # 1. Direct ticker path
     if looks_like_ticker(q):
         return {
             "input": query,
             "symbol": q.upper(),
             "name": q.upper(),
+            "exchange": None,
             "source": "direct",
         }
 
-    # 2. Search path
-    quotes = search_quotes(q, max_results=15)
-    if not quotes:
-        raise ValueError(f"Could not resolve '{query}' to a ticker symbol.")
-
-    ranked = []
-    for item in quotes:
-        symbol = item.get("symbol")
-        if not symbol:
-            continue
-
-        ranked.append({
-            "input": query,
-            "symbol": symbol.upper(),
-            "name": item.get("shortname") or item.get("longname") or symbol.upper(),
-            "quote_type": item.get("quoteType"),
-            "exchange": item.get("exchange") or item.get("fullExchangeName"),
-            "source": "search",
-            "_score": score_quote_match(item, q),
-        })
-
+    ranked = gather_ranked_candidates(q)
     if not ranked:
         raise ValueError(f"Could not resolve '{query}' to a ticker symbol.")
 
-    ranked.sort(key=lambda x: x["_score"], reverse=True)
     best = ranked[0].copy()
     best.pop("_score", None)
     return best
@@ -150,14 +209,43 @@ def resolve_symbol(query: str) -> Dict[str, Any]:
 
 def resolve_many(query_list: List[str]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
+
     for q in query_list:
         if not q.strip():
             continue
+
         try:
             out.append(resolve_symbol(q))
         except Exception as exc:
-            out.append({
-                "input": q,
-                "error": str(exc),
-            })
+            out.append(
+                {
+                    "input": q,
+                    "error": str(exc),
+                }
+            )
+
+    return out
+
+
+def search_symbol_suggestions(query: str, max_results: int = 8) -> List[Dict[str, Any]]:
+    """
+    Return ranked suggestions for autocomplete.
+    """
+    q = normalize_query(query)
+    if not q or len(q) < 2:
+        return []
+
+    ranked = gather_ranked_candidates(q)
+    out = []
+
+    for item in ranked[:max_results]:
+        out.append(
+            {
+                "symbol": item["symbol"],
+                "name": item.get("name"),
+                "exchange": item.get("exchange"),
+                "source": item.get("source", "search"),
+            }
+        )
+
     return out

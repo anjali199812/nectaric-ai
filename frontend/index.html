@@ -47,10 +47,13 @@
         <p class="card-subtitle">Live prototype</p>
 
         <form id="snapshotForm" class="form-grid">
-          <label>
-            <span>Tickers or company names (comma-separated)</span>
-            <input id="tickers" type="text" value="NVIDIA, Apple, Microsoft, Amazon" />
-          </label>
+            <label class="autocomplete-wrapper">
+                <span>Tickers or company names (comma-separated)</span>
+                <div class="autocomplete-box">
+                  <input id="tickers" type="text" value="NVIDIA, Apple, Microsoft, Amazon" autocomplete="off" />
+                  <div id="tickerSuggestions" class="suggestions-dropdown"></div>
+                </div>
+              </label>
 
           <label>
             <span>Forecast horizon</span>

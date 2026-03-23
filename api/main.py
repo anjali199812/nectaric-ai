@@ -11,6 +11,7 @@ from nectaric_core.pipeline import (
     run_pipeline_for_ticker,
 )
 from nectaric_core.realtime_scores import get_realtime_factor_snapshot
+from nectaric_core.symbol_resolver import resolve_symbol, resolve_many, search_symbol_suggestions
 
 app = FastAPI(
     title="Nectaric AI API",
@@ -181,5 +182,19 @@ async def resolve_symbol_api(
 ):
     try:
         return resolve_symbol(query)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    
+    
+@app.get("/api/search_symbols", tags=["symbol"])
+async def search_symbols_api(
+    query: str = Query(..., description="Company name or partial stock name"),
+    max_results: int = Query(8, ge=1, le=15),
+):
+    try:
+        return {
+            "query": query,
+            "results": search_symbol_suggestions(query, max_results=max_results)
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

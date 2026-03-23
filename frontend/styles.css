@@ -398,3 +398,64 @@ body {
   color: #6b7280;
 }
 
+.autocomplete-wrapper {
+  position: relative;
+}
+
+.autocomplete-box {
+  position: relative; 
+  input {
+    width: -webkit-fill-available;;
+  }
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #020617;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+  z-index: 20;
+  overflow: hidden;
+  display: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #111827;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item.active {
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.suggestion-symbol {
+  font-weight: 600;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.suggestion-name {
+  color: #cbd5e1;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.suggestion-meta {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
