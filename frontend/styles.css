@@ -37,6 +37,7 @@ body {
 
 .brand-title {
   font-weight: 600;
+  font-size: 2rem ;
 }
 
 .brand-subtitle {
@@ -215,6 +216,12 @@ body {
   font-weight: 600;
   color: #cbd5e1;
   list-style: none;
+}
+
+.brand-logo {
+  width: 5rem;
+  height: 5rem;
+  margin-right: 10px;
 }
 
 .advanced-settings summary::-webkit-details-marker {
