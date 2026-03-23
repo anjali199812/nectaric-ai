@@ -1,0 +1,11 @@
+yfinance
+pandas
+numpy
+matplotlib
+scikit-learn
+jupyter
+fastapi
+uvicorn
+flask
+flask-cors
+requests
