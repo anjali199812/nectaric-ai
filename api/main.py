@@ -19,6 +19,14 @@ app = FastAPI(
     description="Nectaric AI – all-in-one Quant / Valuation / News prototype",
 )
 
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    return FileResponse("frontend/index.html")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # tighten later to your Vercel domain

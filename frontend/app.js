@@ -2,8 +2,10 @@ let positionChart = null;
 let suggestionIndex = -1;
 let suggestionItems = [];
 let autocompleteDebounce = null;
-const API_BASE = "https://nectaric-ai.onrender.com";
-
+const API_BASE =
+  window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    ? "http://127.0.0.1:8000"
+    : "https://nectaric-ai.onrender.com";
 function getCurrentSearchToken(fullText) {
   const parts = fullText.split(",");
   return parts[parts.length - 1].trim();
@@ -169,6 +171,24 @@ function renderBar(label, value) {
     </div>
   `;
 }
+
+// function renderBar(label, value) {
+//   const num = Number(value);
+//   const safeValue = Number.isFinite(num) ? Math.max(0, Math.min(num, 10)) : 0;
+//   const pct = safeValue * 10;
+
+//   return `
+//     <div class="factor-bar">
+//       <div class="factor-bar-header">
+//         <span>${label}</span>
+//         <span>${safeValue.toFixed(2)}/10</span>
+//       </div>
+//       <div class="factor-bar-track">
+//         <div class="factor-bar-fill" style="width:${pct}%"></div>
+//       </div>
+//     </div>
+//   `;
+// }
 
 async function runSnapshot(evt) {
   evt.preventDefault();
