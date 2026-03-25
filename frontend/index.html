@@ -4,108 +4,106 @@
   <meta charset="UTF-8" />
   <title>Nectaric AI – All-in-one research</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="./styles.css">
-  <!-- <link rel="icon" href="/static/favicon.png" /> -->
+  <link rel="stylesheet" href="./styles.css?v=3" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<div class="app-shell">
-  <header class="topbar">
-    <div class="brand">
-      <img src="./logo.png" alt="Nectaric AI logo" class="brand-logo ">
-      <div class="brand-text">
-        <div class="brand-title">Nectaric AI</div>
-        <div class="brand-subtitle">All-in-one research</div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="./logo.png" alt="Nectaric AI logo" class="brand-logo ">
+        <div class="brand-text">
+          <div class="brand-title">Nectaric AI</div>
+          <div class="brand-subtitle">All-in-one research</div>
+        </div>
       </div>
+      <div class="topbar-right">
+        <span id="apiStatus" class="badge badge-muted">API: checking…</span>
+      </div>
+    </header>
+
+    <nav class="nav-tabs">
+      <button class="tab active">Overview</button>
+      <button class="tab disabled">Watchlists (coming)</button>
+      <button class="tab disabled">Screeners (coming)</button>
+      <button class="tab disabled">Backtests (coming)</button>
+    </nav>
+
+    <div class="data-sources">
+      Data sources <strong>Finnhub</strong> (search) •
+      <strong>FMP</strong> (quote, history, fundamentals) •
+      <strong>ML Strategy</strong> •
+      <strong>News</strong> (stub)
     </div>
-    <div class="topbar-right">
-      <span id="apiStatus" class="badge badge-muted">API: checking…</span>
-    </div>
-  </header>
 
-  <nav class="nav-tabs">
-    <button class="tab active">Overview</button>
-    <button class="tab disabled">Watchlists (coming)</button>
-    <button class="tab disabled">Screeners (coming)</button>
-    <button class="tab disabled">Backtests (coming)</button>
-  </nav>
+    <main class="main-grid">
+      <section class="card card-controls">
+        <h1 class="page-title">Trading Dashboard</h1>
+        <p class="page-subtitle">
+          Quant/AI • Valuation • Risk • Company search – all in one Nectaric view
+        </p>
 
-  <div class="data-sources">
-    Data sources <strong>Prices</strong> (Yahoo) • <strong>ML Strategy</strong> •
-    <strong>Dynamic Factor Score</strong> • <strong>News</strong> (stub)
-  </div>
+        <div class="card-inner">
+          <h2 class="card-title">Run Nectaric Snapshot</h2>
+          <p class="card-subtitle">Provider-based prototype</p>
 
-  <main class="main-grid">
-    <section class="card card-controls">
-      <h1 class="page-title">Trading Dashboard</h1>
-      <p class="page-subtitle">
-        Quant/AI • Valuation • News – all in one Nectaric view
-      </p>
-
-      <div class="card-inner">
-        <h2 class="card-title">Run Nectaric Snapshot</h2>
-        <p class="card-subtitle">Live prototype</p>
-
-        <form id="snapshotForm" class="form-grid">
+          <form id="snapshotForm" class="form-grid">
             <label class="autocomplete-wrapper">
-                <span>Tickers or company names (comma-separated)</span>
-                <div class="autocomplete-box">
-                  <input id="tickers" type="text" value="NVIDIA, Apple, Microsoft, Amazon" autocomplete="off" />
-                  <div id="tickerSuggestions" class="suggestions-dropdown"></div>
-                </div>
-              </label>
+              <span>Tickers or company names (comma-separated)</span>
+              <div class="autocomplete-box">
+                <input
+                  id="tickers"
+                  type="text"
+                  placeholder="NVIDIA"
+                  autocomplete="off"
+                />
+                <div id="tickerSuggestions" class="suggestions-dropdown"></div>
+              </div>
+            </label>
 
-          <label>
-            <span>Forecast horizon</span>
-            <select id="horizon">
-              <option value="30">30 days</option>
-              <option value="60">60 days</option>
-              <option value="90">90 days</option>
-              <option value="180">180 days (6 months)</option>
-              <option value="365">365 days (12 months)</option>
-            </select>
-          </label>
+            <label>
+              <span>Forecast horizon (days, up to 365)</span>
+              <input id="horizon" type="number" min="5" max="365" value="30" />
+            </label>
 
-          <details class="advanced-settings">
-            <summary>Advanced settings</summary>
+            <details class="advanced-settings">
+              <summary>Advanced settings</summary>
 
-            <div class="advanced-grid">
-              <label>
-                <span>History start date</span>
-                <input id="start" type="date" value="2015-01-01" />
-              </label>
+              <div class="advanced-grid">
+                <label>
+                  <span>History start date</span>
+                  <input id="start" type="date" value="2015-01-01" />
+                </label>
 
-              <label>
-                <span>Buy threshold P(up)</span>
-                <input id="buy_thresh" type="number" step="0.05" min="0.5" max="0.9" value="0.6" />
-              </label>
+                <label>
+                  <span>Buy threshold P(up)</span>
+                  <input id="buy_thresh" type="number" step="0.05" min="0.5" max="0.9" value="0.6" />
+                </label>
 
-              <label>
-                <span>Sell threshold P(up)</span>
-                <input id="sell_thresh" type="number" step="0.05" min="0.1" max="0.5" value="0.4" />
-              </label>
-            </div>
-          </details>
+                <label>
+                  <span>Sell threshold P(up)</span>
+                  <input id="sell_thresh" type="number" step="0.05" min="0.1" max="0.5" value="0.4" />
+                </label>
+              </div>
+            </details>
 
-          <button id="runBtn" type="submit" class="btn-primary">
-            ▶ Run Snapshot
-          </button>
-        </form>
+            <button id="runBtn" type="submit" class="btn-primary">▶ Run Snapshot</button>
+          </form>
 
-        <div id="errorBox" class="error-box" style="display:none;"></div>
-      </div>
-    </section>
+          <div id="errorBox" class="error-box" style="display:none;"></div>
+        </div>
+      </section>
 
-    <section class="card card-market">
-      <h2 class="card-title">Market Glance</h2>
-      <p class="card-subtitle">
-        Quick view of trading signal, performance and dynamic factor score across tickers.
-      </p>
+      <section class="card card-market">
+        <h2 class="card-title">Market Glance</h2>
+        <p class="card-subtitle">
+          Quick view of trading signal, performance, conviction, risk and buy safety across tickers.
+        </p>
 
-      <div class="table-wrapper">
-        <table class="table">
-          <thead>
-            <tr>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
                 <th>Ticker</th>
                 <th>Decision</th>
                 <th>Price</th>
@@ -119,38 +117,37 @@
                 <th>Buy Safety</th>
                 <th>Score</th>
               </tr>
-          </thead>
-          <tbody id="comparisonBody"></tbody>
-        </table>
+            </thead>
+            <tbody id="comparisonBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <section class="card card-details">
+      <h2 class="card-title">Ticker Details</h2>
+      <p class="card-subtitle">
+        ML probabilities, backtest performance, factor breakdown and provider-based scoring.
+      </p>
+
+      <div class="ticker-layout">
+        <div id="tickerDetails" class="ticker-info">
+          <p>Select a row in the comparison table to see full details here.</p>
+        </div>
+
+        <div class="ticker-chart">
+          <h4 class="chart-title">Position probability</h4>
+          <canvas id="positionPie"></canvas>
+        </div>
       </div>
     </section>
-  </main>
 
-  <section class="card card-details">
-    <h2 class="card-title">Ticker Details</h2>
-    <p class="card-subtitle">
-      ML probabilities, backtest performance, factor breakdown and live scoring.
-    </p>
+    <footer class="footer">
+      <span>Nectaric AI – Prototype</span>
+      <span>Powered by FastAPI, Finnhub, FMP and your ML pipeline</span>
+    </footer>
+  </div>
 
-    <div class="ticker-layout">
-      <div id="tickerDetails" class="ticker-info">
-        <p>Select a row in the comparison table to see full details here.</p>
-      </div>
-
-      <div class="ticker-chart">
-        <h4 class="chart-title">Position probability</h4>
-        <canvas id="positionPie"></canvas>
-      </div>
-    </div>
-  </section>
-
-  <footer class="footer">
-    <img src="./logo.png" alt="Nectaric AI logo" style="width:18px;vertical-align:middle;margin-right:6px;">
-    <span>Nectaric AI – Prototype</span>
-    <span>Powered by FastAPI, yfinance, and your ML pipeline</span>
-  </footer>
-</div>
-
-<script src="./app.js"></script>
+  <script src="./app.js?v=3"></script>
 </body>
 </html>
