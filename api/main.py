@@ -28,12 +28,12 @@ app.add_middleware(
 )
 
 # Serve frontend files
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 
-@app.get("/", include_in_schema=False)
-async def serve_frontend():
-    return FileResponse("frontend/index.html")
+# @app.get("/", include_in_schema=False)
+# async def serve_frontend():
+#     return FileResponse("frontend/index.html")
 
 
 @app.get("/health", tags=["meta"])

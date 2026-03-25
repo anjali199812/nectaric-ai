@@ -2,6 +2,7 @@ let positionChart = null;
 let suggestionIndex = -1;
 let suggestionItems = [];
 let autocompleteDebounce = null;
+const API_BASE = "https://nectaric-ai.onrender.com";
 
 function getCurrentSearchToken(fullText) {
   const parts = fullText.split(",");
@@ -81,7 +82,7 @@ async function fetchSuggestions(query) {
   }
 
   try {
-    const resp = await fetch(`/api/search_symbols?query=${encodeURIComponent(query)}&max_results=8`);
+    const resp = await fetch(`${API_BASE}/api/search_symbols?query=${encodeURIComponent(query)}&max_results=8`);
     if (!resp.ok) {
       hideSuggestions();
       return;
@@ -192,7 +193,7 @@ async function runSnapshot(evt) {
   btn.textContent = "Running…";
 
   try {
-    const resp = await fetch(`/api/compare?${params.toString()}`);
+    const resp = await fetch(`${API_BASE}/api/compare?${params.toString()}`);
     if (!resp.ok) {
       const text = await resp.text();
       showError(`API error (${resp.status}): ${text}`);
@@ -368,7 +369,7 @@ async function checkHealth() {
   const el = document.getElementById("apiStatus");
   if (!el) return;
   try {
-    const resp = await fetch("/health");
+    const resp = await fetch(`${API_BASE}/health`);
     if (!resp.ok) throw new Error();
     el.textContent = "API: healthy";
     el.classList.remove("badge-danger");
