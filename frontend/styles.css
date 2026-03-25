@@ -404,9 +404,10 @@ body {
 
 .autocomplete-box {
   position: relative; 
-  input {
-    width: -webkit-fill-available;;
-  }
+}
+
+.autocomplete-box input {
+  width: 100%;
 }
 
 .suggestions-dropdown {

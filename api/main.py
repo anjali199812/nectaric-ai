@@ -27,15 +27,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve frontend files
-# app.mount("/static", StaticFiles(directory="frontend"), name="static")
-
-
-# @app.get("/", include_in_schema=False)
-# async def serve_frontend():
-#     return FileResponse("frontend/index.html")
-
-
 @app.get("/health", tags=["meta"])
 async def health_check():
     return {"status": "ok", "message": "Nectaric AI is running."}
