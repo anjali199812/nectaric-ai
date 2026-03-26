@@ -18,18 +18,26 @@ app = FastAPI(
     version="0.2.0",
     description="Nectaric AI – ML signals, autocomplete, and provider-based factor scoring",
 )
+origins = [
+    "https://nectaric-ai-venture.onrender.com",
+    "https://nectaric-ai-frontend.onrender.com",
+    "https://nectaric-ai.onrender.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://nectaric-ai-frontend.onrender.com",
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Serve frontend assets
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
