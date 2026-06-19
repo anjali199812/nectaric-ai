@@ -5,6 +5,8 @@ load_dotenv()
 
 import csv
 import io
+import time
+import threading
 from typing import List
 
 from fastapi import FastAPI, HTTPException, Query
@@ -285,6 +287,66 @@ WATCHLIST = [
     "HIMS", "SNAP",
 ]
 
+# In-memory cache: computed once, served instantly on every subsequent call.
+# Refreshes in the background every 6 hours so data stays reasonably fresh.
+_csv_cache: dict = {"csv": None, "built_at": 0, "refreshing": False}
+_CSV_TTL = 6 * 3600   # 6 hours
+
+
+def _build_csv_rows(tickers: list[str]) -> str:
+    client = FinnhubClient()
+    rows   = []
+    for q in tickers:
+        try:
+            resolved = client.resolve_symbol(q)
+            symbol   = resolved.symbol
+            core     = run_pipeline_for_ticker(ticker=symbol, start="2015-01-01",
+                                               horizon=10, buy_thresh=0.6, sell_thresh=0.4)
+            factor   = get_realtime_factor_snapshot(symbol)
+            factors  = factor.get("factors", {})
+            rows.append({
+                "Ticker":              symbol,
+                "Name":                resolved.name or symbol,
+                "Decision":            core["decision_today"],
+                "Price_USD":           round(core["price_today"], 2),
+                "P_Up_Pct":            round((core["proba_pos_move"] or 0) * 100, 2),
+                "Last_10d_Actual_Pct": round((core["last_10d_actual"] or 0) * 100, 2),
+                "Annual_Return_Pct":   round((core["annual_return"] or 0) * 100, 2),
+                "Sharpe_Ratio":        round(core["sharpe"] or 0, 3),
+                "Cum_Return_Pct":      round(core["cum_return"] or 0, 2),
+                "Nectaric_Score":      factor.get("final_score", ""),
+                "Conviction":          factor.get("conviction", ""),
+                "Risk_Level":          factor.get("risk_level", ""),
+                "Buy_Safety":          factor.get("buy_safety", ""),
+                "Quality_Score":       factors.get("quality", ""),
+                "Growth_Score":        factors.get("growth", ""),
+                "Value_Score":         factors.get("value", ""),
+                "Momentum_Score":      factors.get("momentum", ""),
+                "Risk_Score":          factors.get("risk", ""),
+            })
+        except Exception:
+            pass
+
+    out = io.StringIO()
+    if rows:
+        writer = csv.DictWriter(out, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    return out.getvalue()
+
+
+def _refresh_cache_bg():
+    global _csv_cache
+    _csv_cache["refreshing"] = True
+    try:
+        csv_str = _build_csv_rows(WATCHLIST)
+        _csv_cache["csv"]      = csv_str
+        _csv_cache["built_at"] = time.time()
+    except Exception:
+        pass
+    finally:
+        _csv_cache["refreshing"] = False
+
 
 @app.get("/api/watchlist", tags=["export"])
 async def get_watchlist():
@@ -295,75 +357,51 @@ async def get_watchlist():
 async def export_csv(
     tickers: str = Query(
         ",".join(WATCHLIST),
-        description="Comma-separated tickers. Defaults to full Nectaric watchlist.",
+        description="Comma-separated tickers. Defaults to full watchlist (served from cache).",
     ),
-    start:       str   = Query("2015-01-01"),
-    horizon:     int   = Query(10),
-    buy_thresh:  float = Query(0.6),
-    sell_thresh: float = Query(0.4),
 ):
     """
-    Export signal + factor data as a flat CSV table.
+    Export Nectaric signal + factor data as a flat CSV for Power BI / Tableau / Google Sheets.
 
-    Use this URL as a live data source in Power BI or Tableau:
-      Power BI  : Get Data -> Web -> paste this URL
-      Tableau   : Connect -> Web Data Connector -> paste this URL
-      Excel     : Data -> From Web -> paste this URL
+    Full watchlist calls are served from an in-memory cache (instant response).
+    Cache rebuilds in the background every 6 hours.
+    First call after a cold start triggers a background rebuild — check back in ~5 minutes.
 
-    The CSV refreshes with live data every time Power BI / Tableau refreshes.
+    Google Sheets:  =IMPORTDATA("https://nectaric-ai.onrender.com/api/export/csv")
     """
-    raw_queries = [t.strip() for t in tickers.split(",") if t.strip()]
-    if not raw_queries:
-        raise HTTPException(status_code=400, detail="No valid tickers provided.")
+    global _csv_cache
+    requested = [t.strip() for t in tickers.split(",") if t.strip()]
 
-    client = FinnhubClient()
-    rows   = []
+    # If caller wants custom tickers, compute on the fly (small list only)
+    is_full_watchlist = set(requested) == set(WATCHLIST)
 
-    for q in raw_queries:
-        try:
-            resolved = client.resolve_symbol(q)
-            symbol   = resolved.symbol
-
-            core   = run_pipeline_for_ticker(
-                ticker=symbol, start=start, horizon=horizon,
-                buy_thresh=buy_thresh, sell_thresh=sell_thresh,
+    if is_full_watchlist:
+        # Serve from cache if available
+        if _csv_cache["csv"]:
+            # Kick off background refresh if stale
+            stale = time.time() - _csv_cache["built_at"] > _CSV_TTL
+            if stale and not _csv_cache["refreshing"]:
+                threading.Thread(target=_refresh_cache_bg, daemon=True).start()
+            return StreamingResponse(
+                iter([_csv_cache["csv"]]),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=nectaric_signals.csv"},
             )
-            factor  = get_realtime_factor_snapshot(symbol)
-            factors = factor.get("factors", {})
+        else:
+            # Cache empty (cold start) — trigger background build, return placeholder
+            if not _csv_cache["refreshing"]:
+                threading.Thread(target=_refresh_cache_bg, daemon=True).start()
+            placeholder = "Status,Message\nbuilding,Nectaric is computing signals for all 25 stocks. Refresh in 5 minutes.\n"
+            return StreamingResponse(
+                iter([placeholder]),
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=nectaric_signals.csv"},
+            )
 
-            rows.append({
-                "Ticker":             symbol,
-                "Name":               resolved.name or symbol,
-                "Decision":           core["decision_today"],
-                "Price_USD":          round(core["price_today"], 2),
-                "P_Up_Pct":           round((core["proba_pos_move"] or 0) * 100, 2),
-                "Last_10d_Actual_Pct": round((core["last_10d_actual"] or 0) * 100, 2),
-                "Annual_Return_Pct":  round((core["annual_return"] or 0) * 100, 2),
-                "Sharpe_Ratio":       round(core["sharpe"] or 0, 3),
-                "Cum_Return_Pct":     round(core["cum_return"] or 0, 2),
-                "Nectaric_Score":     factor.get("final_score", ""),
-                "Conviction":         factor.get("conviction", ""),
-                "Risk_Level":         factor.get("risk_level", ""),
-                "Buy_Safety":         factor.get("buy_safety", ""),
-                "Quality_Score":      factors.get("quality", ""),
-                "Growth_Score":       factors.get("growth", ""),
-                "Value_Score":        factors.get("value", ""),
-                "Momentum_Score":     factors.get("momentum", ""),
-                "Risk_Score":         factors.get("risk", ""),
-                "Horizon_Days":       horizon,
-            })
-        except Exception:
-            pass
-
-    output = io.StringIO()
-    if rows:
-        writer = csv.DictWriter(output, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
-    output.seek(0)
-
+    # Custom small ticker list — compute directly
+    csv_str = _build_csv_rows(requested)
     return StreamingResponse(
-        iter([output.getvalue()]),
+        iter([csv_str]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=nectaric_signals.csv"},
     )
