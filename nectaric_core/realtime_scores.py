@@ -126,7 +126,7 @@ def build_interpretation_from_factors(
     warnings = []
     missing = []
 
-    def _classify_factor(name: str, score: Optional[float], good_label: str, mid_label: str, weak_label: str):
+    def _classify_factor(name, score, good_label, mid_label, weak_label):
         if score is None:
             missing.append(name)
             return
@@ -137,11 +137,11 @@ def build_interpretation_from_factors(
         elif score > 0:
             warnings.append(weak_label)
 
-    _classify_factor("quality", quality_score, "business quality looks strong", "business quality looks reasonable", "business quality is weak")
-    _classify_factor("growth", growth_score, "growth is very strong", "growth is moderate", "growth is not especially strong")
-    _classify_factor("value", value_score, "valuation looks attractive", "valuation looks acceptable", "valuation looks expensive")
-    _classify_factor("momentum", momentum_score, "price momentum is strong", "momentum is supportive", "momentum is only moderate")
-    _classify_factor("risk", risk_score, "risk profile looks relatively stable", "risk profile looks manageable", "risk profile looks elevated")
+    _classify_factor("quality",  quality_score,  "business quality looks strong",          "business quality looks reasonable",   "business quality is weak")
+    _classify_factor("growth",   growth_score,   "growth is very strong",                  "growth is moderate",                   "growth is not especially strong")
+    _classify_factor("value",    value_score,    "valuation looks attractive",             "valuation looks acceptable",           "valuation looks expensive")
+    _classify_factor("momentum", momentum_score, "price momentum is strong",               "momentum is supportive",               "momentum is only moderate")
+    _classify_factor("risk",     risk_score,     "risk profile looks relatively stable",   "risk profile looks manageable",        "risk profile looks elevated")
 
     if final_score >= 8:
         opening = "Overall, this looks like a strong candidate."
@@ -186,22 +186,10 @@ def score_quality(snapshot: Dict[str, Any]) -> tuple[Optional[float], Dict[str, 
     metrics = snapshot.get("key_metrics_ttm", {})
     scores = snapshot.get("financial_scores", {})
 
-    roe = _pick_first(
-        metrics,
-        "roeTTM", "roe", "returnOnEquityTTM", "returnOnEquity",
-    )
-    operating_margin = _pick_first(
-        ratios,
-        "operatingProfitMarginTTM", "operatingMarginTTM", "operatingMargin", "operatingProfitMargin",
-    )
-    profit_margin = _pick_first(
-        ratios,
-        "netProfitMarginTTM", "netMarginTTM", "netProfitMargin", "netMargin",
-    )
-    debt_to_equity = _pick_first(
-        ratios,
-        "debtEquityRatioTTM", "debtToEquityTTM", "debtToEquity", "debtEquityRatio",
-    )
+    roe = _pick_first(metrics, "roeTTM", "roe", "returnOnEquityTTM", "returnOnEquity")
+    operating_margin = _pick_first(ratios, "operatingProfitMarginTTM", "operatingMarginTTM", "operatingMargin", "operatingProfitMargin")
+    profit_margin = _pick_first(ratios, "netProfitMarginTTM", "netMarginTTM", "netProfitMargin", "netMargin")
+    debt_to_equity = _pick_first(ratios, "debtEquityRatioTTM", "debtToEquityTTM", "debtToEquity", "debtEquityRatio")
     if debt_to_equity is None:
         debt_to_equity = _pick_first(scores, "debtToEquity")
 
@@ -233,16 +221,9 @@ def score_growth(snapshot: Dict[str, Any]) -> tuple[Optional[float], Dict[str, A
     growth = snapshot.get("income_statement_growth", {})
     quote = snapshot.get("quote", {})
 
-    revenue_growth = _pick_first(
-        growth,
-        "growthRevenue", "revenueGrowth", "revenueGrowthTTM",
-    )
-    earnings_growth = _pick_first(
-        growth,
-        "growthNetIncome", "growthEPS", "epsgrowth", "earningsGrowth",
-    )
+    revenue_growth = _pick_first(growth, "growthRevenue", "revenueGrowth", "revenueGrowthTTM")
+    earnings_growth = _pick_first(growth, "growthNetIncome", "growthEPS", "epsgrowth", "earningsGrowth")
 
-    # optional soft fallback from quote provider if exposed there
     if revenue_growth is None:
         revenue_growth = _pick_first(quote, "revenueGrowth")
     if earnings_growth is None:
@@ -270,26 +251,17 @@ def score_value(snapshot: Dict[str, Any]) -> tuple[Optional[float], Dict[str, An
     metrics = snapshot.get("key_metrics_ttm", {})
     quote = snapshot.get("quote", {})
 
-    pe = _pick_first(
-        ratios,
-        "peRatioTTM", "priceEarningsRatioTTM", "peRatio", "priceToEarningsRatio",
-    )
+    pe = _pick_first(ratios, "peRatioTTM", "priceEarningsRatioTTM", "peRatio", "priceToEarningsRatio")
     if pe is None:
         pe = _pick_first(quote, "pe", "peRatio")
 
-    pb = _pick_first(
-        ratios,
-        "priceToBookRatioTTM", "pbRatioTTM", "pbRatio", "priceToBookRatio",
-    )
+    pb = _pick_first(ratios, "priceToBookRatioTTM", "pbRatioTTM", "pbRatio", "priceToBookRatio")
     if pb is None:
         pb = _pick_first(metrics, "pbRatioTTM", "pbRatio")
     if pb is None:
         pb = _pick_first(quote, "priceToBookRatio")
 
-    ps = _pick_first(
-        ratios,
-        "priceToSalesRatioTTM", "psRatioTTM", "priceToSalesRatio", "psRatio",
-    )
+    ps = _pick_first(ratios, "priceToSalesRatioTTM", "psRatioTTM", "priceToSalesRatio", "psRatio")
     if ps is None:
         ps = _pick_first(metrics, "psRatioTTM", "psRatio")
     if ps is None:
@@ -313,7 +285,12 @@ def score_value(snapshot: Dict[str, Any]) -> tuple[Optional[float], Dict[str, An
 
 
 def score_momentum(price_df: pd.DataFrame) -> tuple[Optional[float], Dict[str, Any]]:
+    if price_df.empty or "Close" not in price_df.columns:
+        return None, {}
+
     price = price_df["Close"].astype(float).copy()
+    if len(price) == 0:
+        return None, {}
 
     ret_6m = price.iloc[-1] / price.iloc[-126] - 1 if len(price) > 126 else None
     ret_12m = price.iloc[-1] / price.iloc[-252] - 1 if len(price) > 252 else None
@@ -350,7 +327,15 @@ def score_momentum(price_df: pd.DataFrame) -> tuple[Optional[float], Dict[str, A
 
 
 def score_risk(price_df: pd.DataFrame, snapshot: Dict[str, Any]) -> tuple[Optional[float], Dict[str, Any]]:
+    empty_raw = {"volatility_30d_annualised": None, "max_drawdown_1y": None, "beta": None, "debt_to_equity": None}
+
+    if price_df.empty or "Close" not in price_df.columns:
+        return None, empty_raw
+
     price = price_df["Close"].astype(float).copy()
+    if len(price) == 0:
+        return None, empty_raw
+
     returns = price.pct_change().dropna()
 
     vol_30d = returns.tail(30).std() * np.sqrt(252) if len(returns) >= 30 else None
@@ -364,10 +349,7 @@ def score_risk(price_df: pd.DataFrame, snapshot: Dict[str, Any]) -> tuple[Option
     scores = snapshot.get("financial_scores", {})
 
     beta = _pick_first(quote, "beta")
-    debt_to_equity = _pick_first(
-        ratios,
-        "debtEquityRatioTTM", "debtToEquityTTM", "debtToEquity", "debtEquityRatio",
-    )
+    debt_to_equity = _pick_first(ratios, "debtEquityRatioTTM", "debtToEquityTTM", "debtToEquity", "debtEquityRatio")
     if debt_to_equity is None:
         debt_to_equity = _pick_first(scores, "debtToEquity")
 
@@ -415,22 +397,22 @@ def get_realtime_factor_snapshot(ticker: str) -> Dict[str, Any]:
     snapshot = client.get_fundamental_snapshot(symbol)
     price_df = client.get_historical_eod(symbol)
 
-    quality_score, quality_metrics = score_quality(snapshot)
-    growth_score, growth_metrics = score_growth(snapshot)
-    value_score, value_metrics = score_value(snapshot)
+    quality_score,  quality_metrics  = score_quality(snapshot)
+    growth_score,   growth_metrics   = score_growth(snapshot)
+    value_score,    value_metrics    = score_value(snapshot)
     momentum_score, momentum_metrics = score_momentum(price_df)
-    risk_score, risk_metrics = score_risk(price_df, snapshot)
+    risk_score,     risk_metrics     = score_risk(price_df, snapshot)
 
     factors = {
-        "quality": quality_score,
-        "growth": growth_score,
-        "value": value_score,
+        "quality":  quality_score,
+        "growth":   growth_score,
+        "value":    value_score,
         "momentum": momentum_score,
-        "risk": risk_score,
+        "risk":     risk_score,
     }
 
     final_score = _weighted_average_from_available(factors)
-    conviction = conviction_from_score(final_score)
+    conviction  = conviction_from_score(final_score)
 
     risk_level = classify_risk_level(
         final_score=final_score,
@@ -459,30 +441,30 @@ def get_realtime_factor_snapshot(ticker: str) -> Dict[str, Any]:
 
     available_factors = {k: v for k, v in factors.items() if v is not None}
     if available_factors:
-        best_factor = max(available_factors, key=available_factors.get)
+        best_factor    = max(available_factors, key=available_factors.get)
         weakest_factor = min(available_factors, key=available_factors.get)
-        best_factor_payload = {"name": best_factor, "score": available_factors[best_factor]}
+        best_factor_payload    = {"name": best_factor,    "score": available_factors[best_factor]}
         weakest_factor_payload = {"name": weakest_factor, "score": available_factors[weakest_factor]}
     else:
-        best_factor_payload = {"name": None, "score": None}
+        best_factor_payload    = {"name": None, "score": None}
         weakest_factor_payload = {"name": None, "score": None}
 
     return {
-        "ticker": symbol,
-        "final_score": final_score,
-        "conviction": conviction,
-        "risk_level": risk_level,
-        "buy_safety": buy_safety,
+        "ticker":         symbol,
+        "final_score":    final_score,
+        "conviction":     conviction,
+        "risk_level":     risk_level,
+        "buy_safety":     buy_safety,
         "interpretation": interpretation,
-        "weights": WEIGHTS,
-        "factors": factors,
-        "best_factor": best_factor_payload,
+        "weights":        WEIGHTS,
+        "factors":        factors,
+        "best_factor":    best_factor_payload,
         "weakest_factor": weakest_factor_payload,
         "raw_metrics": {
-            "quality": quality_metrics,
-            "growth": growth_metrics,
-            "value": value_metrics,
+            "quality":  quality_metrics,
+            "growth":   growth_metrics,
+            "value":    value_metrics,
             "momentum": momentum_metrics,
-            "risk": risk_metrics,
+            "risk":     risk_metrics,
         },
     }
