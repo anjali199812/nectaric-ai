@@ -40,6 +40,11 @@ function fmtNum(x) {
   return Number(x).toFixed(2);
 }
 
+function fmtPrice(x) {
+  if (x === null || x === undefined || isNaN(x)) return "—";
+  return "$" + Number(x).toFixed(2);
+}
+
 
 // -------------------------
 // Badge helpers
@@ -206,6 +211,100 @@ async function fetchSuggestions(query) {
 
 
 // -------------------------
+// Signal card helpers (NEW)
+// -------------------------
+function signalDecisionColor(decision) {
+  if (decision === "BUY")  return "#22c55e";
+  if (decision === "HOLD") return "#3b82f6";
+  return "#6b7280";
+}
+
+function renderSignalRow(label, value, valueColor) {
+  if (value === null || value === undefined) return "";
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:6px 0;border-bottom:1px solid #1f2937;">
+      <span style="color:#9ca3af;font-size:12px;">${label}</span>
+      <span style="color:${valueColor || "#e2e8f0"};font-weight:600;font-size:13px;">${value}</span>
+    </div>`;
+}
+
+function renderSignalCard(signal, label) {
+  if (!signal) return "";
+
+  const dec   = signal.decision || "NO POSITION";
+  const color = signalDecisionColor(dec);
+  const isActive = dec === "BUY" || dec === "HOLD";
+
+  const rows = isActive
+    ? `
+      ${renderSignalRow("Entry Price",    fmtPrice(signal.entry_price),  "#e2e8f0")}
+      ${renderSignalRow("Stop Loss",      fmtPrice(signal.stop_loss),    "#ef4444")}
+      ${renderSignalRow("Target Price",   fmtPrice(signal.target_price), "#22c55e")}
+      ${renderSignalRow("Risk / Reward",  signal.risk_reward_ratio ? "1 : " + fmtNum(signal.risk_reward_ratio) : "—", "#e2e8f0")}
+      ${renderSignalRow("Max Loss",       signal.max_loss_pct       ? "-" + fmtNum(signal.max_loss_pct) + "%" : "—", "#ef4444")}
+      ${renderSignalRow("Potential Gain", signal.potential_gain_pct ? "+" + fmtNum(signal.potential_gain_pct) + "%" : "—", "#22c55e")}
+    `
+    : `<div style="text-align:center;padding:12px 0;color:#6b7280;font-size:12px;font-style:italic;">
+         No active trade signal — model probability below buy threshold
+       </div>`;
+
+  return `
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;
+                padding:14px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:0.06em;">${label}</span>
+        <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+                     background:${color}22;color:${color};border:1px solid ${color}55;">${dec}</span>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;">${signal.duration || ""}</div>
+      <div style="font-size:12px;margin-bottom:8px;">
+        <span style="color:#9ca3af;">P(Up) </span>
+        <strong style="color:#e2e8f0;">${signal.probability_up ?? "—"}%</strong>
+        <span style="color:#475569;margin:0 6px;">|</span>
+        <span style="color:#9ca3af;">ATR </span>
+        <strong style="color:#e2e8f0;">${fmtPrice(signal.atr_14)}</strong>
+      </div>
+      ${rows}
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #1f2937;
+                  font-size:11px;color:#475569;">
+        Backtest: <strong style="color:#94a3b8;">${fmtPct(signal.annual_return)}</strong> ann. return
+        &nbsp;|&nbsp; Sharpe <strong style="color:#94a3b8;">${fmtNum(signal.sharpe)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+async function fetchAndRenderSignals(ticker) {
+  const section = document.getElementById("signalsSection");
+  if (!section) return;
+
+  section.innerHTML = `
+    <p style="color:#64748b;font-size:12px;font-style:italic;">Loading trade signals...</p>`;
+
+  try {
+    const resp = await fetch(
+      `${API_BASE}/api/actionable_signals?ticker=${encodeURIComponent(ticker)}`
+    );
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    const data = await resp.json();
+
+    section.innerHTML = `
+      <hr style="margin:14px 0;border-color:#1f2937;" />
+      <p style="font-size:13px;font-weight:700;color:#94a3b8;
+                letter-spacing:0.06em;margin-bottom:10px;">TRADE SIGNALS</p>
+      ${renderSignalCard(data.short_term, "SHORT-TERM")}
+      ${renderSignalCard(data.long_term,  "LONG-TERM")}
+    `;
+  } catch (err) {
+    section.innerHTML = `
+      <p style="color:#ef4444;font-size:12px;">Could not load signals: ${err.message}</p>`;
+  }
+}
+
+
+// -------------------------
 // Table / details rendering
 // -------------------------
 function renderComparisonTable(rows) {
@@ -258,20 +357,18 @@ function selectTicker(row, horizonOverride) {
   const details = document.getElementById("tickerDetails");
   if (!details) return;
 
-  const proba = row.proba_pos_move ?? null;
+  const proba   = row.proba_pos_move ?? null;
   const horizon = horizonOverride || row.horizon || 10;
 
-  const factor = row.factor_model || {};
-  const factors = factor.factors || {};
-
-  const finalScore = factor.final_score ?? row.nectaric_score ?? "—";
-  const conviction = factor.conviction || row.valuation_status || "—";
-  const riskLevel = row.risk_level || factor.risk_level || "—";
-  const buySafety = row.buy_safety || factor.buy_safety || "—";
+  const factor       = row.factor_model || {};
+  const factors      = factor.factors || {};
+  const finalScore   = factor.final_score ?? row.nectaric_score ?? "—";
+  const conviction   = factor.conviction  || row.valuation_status || "—";
+  const riskLevel    = row.risk_level     || factor.risk_level    || "—";
+  const buySafety    = row.buy_safety     || factor.buy_safety    || "—";
   const interpretation = factor.interpretation || "—";
-  const bestFactor = factor.best_factor?.name || "—";
+  const bestFactor   = factor.best_factor?.name    || "—";
   const weakestFactor = factor.weakest_factor?.name || "—";
-
   const resolvedName = row.resolved_name || row.input_query || row.ticker;
   const resolvedExchange = row.resolved_exchange || "—";
 
@@ -295,7 +392,8 @@ function selectTicker(row, horizonOverride) {
     <p><strong>Risk Level:</strong> ${renderBadge(riskLevel, badgeClassForRisk(riskLevel))}</p>
     <p><strong>Buy Safety:</strong> ${renderBadge(buySafety, badgeClassForSafety(buySafety))}</p>
 
-    <div style="margin-top:10px;padding:10px 12px;border:1px solid #1f2937;border-radius:10px;background:#020617;">
+    <div style="margin-top:10px;padding:10px 12px;border:1px solid #1f2937;
+                border-radius:10px;background:#020617;">
       <p style="margin:0 0 4px;"><strong>Interpretation</strong></p>
       <p style="margin:0;color:#cbd5e1;">${interpretation}</p>
     </div>
@@ -305,16 +403,22 @@ function selectTicker(row, horizonOverride) {
 
     <div style="margin-top:10px;">
       <p><strong>Factor Breakdown</strong></p>
-      ${renderBar("Quality", factors.quality)}
-      ${renderBar("Growth", factors.growth)}
-      ${renderBar("Value", factors.value)}
+      ${renderBar("Quality",  factors.quality)}
+      ${renderBar("Growth",   factors.growth)}
+      ${renderBar("Value",    factors.value)}
       ${renderBar("Momentum", factors.momentum)}
-      ${renderBar("Risk", factors.risk)}
+      ${renderBar("Risk",     factors.risk)}
     </div>
+
+    <div id="signalsSection" style="margin-top:4px;"></div>
   `;
 
+  // Fetch and render short-term + long-term trade signals
+  fetchAndRenderSignals(row.ticker);
+
+  // Pie chart
   if (proba !== null && proba !== undefined && !isNaN(proba)) {
-    const up = Number(proba) * 100;
+    const up    = Number(proba) * 100;
     const notUp = 100 - up;
 
     const canvas = document.getElementById("positionPie");
@@ -330,11 +434,7 @@ function selectTicker(row, horizonOverride) {
       type: "pie",
       data: {
         labels: ["Chance price UP", "Chance flat / down"],
-        datasets: [
-          {
-            data: [up, notUp],
-          },
-        ],
+        datasets: [{ data: [up, notUp] }],
       },
       options: {
         plugins: {
@@ -382,23 +482,23 @@ async function runSnapshot(evt) {
   clearError();
 
   const tickersStr = document.getElementById("tickers")?.value || "";
-  const start = document.getElementById("start")?.value || "2015-01-01";
-  const horizon = document.getElementById("horizon")?.value || 10;
-  const buy = document.getElementById("buy_thresh")?.value || 0.6;
-  const sell = document.getElementById("sell_thresh")?.value || 0.4;
+  const start      = document.getElementById("start")?.value   || "2015-01-01";
+  const horizon    = document.getElementById("horizon")?.value || 10;
+  const buy        = document.getElementById("buy_thresh")?.value  || 0.6;
+  const sell       = document.getElementById("sell_thresh")?.value || 0.4;
 
   const params = new URLSearchParams({
     tickers: tickersStr,
     start,
     horizon,
-    buy_thresh: buy,
+    buy_thresh:  buy,
     sell_thresh: sell,
   });
 
   const btn = document.getElementById("runBtn");
   if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Running…";
+    btn.disabled     = true;
+    btn.textContent  = "Running…";
   }
 
   try {
@@ -432,12 +532,10 @@ async function runSnapshot(evt) {
       clearDetails();
     } else {
       clearDetails();
-
       const errors = rows
         .filter((r) => r.error)
         .map((r) => `${r.ticker || r.input_query}: ${r.error}`)
         .join(" | ");
-
       showError(errors || "No valid tickers returned.");
     }
   } catch (err) {
@@ -445,7 +543,7 @@ async function runSnapshot(evt) {
     showError("Failed to call /api/compare.");
   } finally {
     if (btn) {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = "▶ Run Snapshot";
     }
   }
@@ -461,13 +559,12 @@ document.addEventListener("DOMContentLoaded", () => {
     form.addEventListener("submit", runSnapshot);
   }
 
-  const tickerInput = document.getElementById("tickers");
+  const tickerInput    = document.getElementById("tickers");
   const suggestionsBox = document.getElementById("tickerSuggestions");
 
   if (tickerInput && suggestionsBox) {
     tickerInput.addEventListener("input", () => {
       const token = getCurrentSearchToken(tickerInput.value);
-
       clearTimeout(autocompleteDebounce);
       autocompleteDebounce = setTimeout(() => {
         fetchSuggestions(token);

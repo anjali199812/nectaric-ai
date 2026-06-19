@@ -234,24 +234,24 @@ def compute_trade_signals(
     }
 
     if decision in ("BUY", "HOLD"):
-        entry  = round(price, 2)
-        stop   = round(price - atr * stop_mult, 2)
-        limit  = round(price + atr * reward_mult * proba, 2)
-        risk   = price - stop
-        reward = limit - price
+        entry       = round(price, 2)
+        stop        = round(price - atr * stop_mult, 2)
+        target      = round(price + atr * reward_mult * proba, 2)
+        risk        = price - stop
+        reward      = target - price
         base.update({
             "entry_price":        entry,
             "stop_loss":          stop,
-            "limit_price":        limit,
+            "target_price":       target,
             "risk_reward_ratio":  round(reward / risk, 2) if risk > 0 else None,
-            "potential_gain_pct": round((limit - entry) / entry * 100, 2),
+            "potential_gain_pct": round((target - entry) / entry * 100, 2),
             "max_loss_pct":       round((entry - stop)  / entry * 100, 2),
         })
     else:
         base.update({
             "entry_price":        None,
             "stop_loss":          None,
-            "limit_price":        None,
+            "target_price":       None,
             "risk_reward_ratio":  None,
             "potential_gain_pct": None,
             "max_loss_pct":       None,
