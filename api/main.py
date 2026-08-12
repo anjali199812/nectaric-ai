@@ -16,6 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from nectaric_core.pipeline import run_pipeline_for_ticker, run_dual_horizon_pipeline
 from nectaric_core.realtime_scores import get_realtime_factor_snapshot
 from nectaric_core.market_providers import FinnhubClient, ProviderError
+from nectaric_core.decision_engine import (
+    fetch as de_fetch, score_short, score_long, build_response as de_build,
+)
 
 
 app = FastAPI(
@@ -169,6 +172,26 @@ async def stock_summary(
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/decision", tags=["decision"])
+async def decision_endpoint(
+    ticker:   str = Query(...,      description="Stock ticker, e.g. NVDA, AAPL, MP"),
+    mode:     str = Query("short",  description="'short' for short-term trading, 'long' for long-term investing"),
+    duration: str = Query("1 to 3 months", description="Planned holding period"),
+):
+    """
+    Full BUY / WATCH / SKIP decision analysis with ATR entry tiers,
+    RSI/MACD technical signals, factor-by-factor scoring, and price chart data.
+    """
+    data, error = de_fetch(ticker.upper())
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    if mode.lower() == "long":
+        score, max_pts, factors = score_long(data)
+    else:
+        score, max_pts, factors = score_short(data)
+    return de_build(ticker, data, score, max_pts, factors, mode, duration)
 
 
 @app.get("/api/actionable_signals", tags=["signals"])

@@ -1,9 +1,9 @@
 yfinance
+curl-cffi
 pandas
 numpy
 matplotlib
 scikit-learn
-jupyter
 fastapi
 uvicorn
 flask

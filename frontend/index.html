@@ -23,7 +23,8 @@
     </header>
 
     <nav class="nav-tabs">
-      <button class="tab active">Overview</button>
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="decision">Decision Engine</button>
       <button class="tab disabled">Watchlists (coming)</button>
       <button class="tab disabled">Screeners (coming)</button>
       <button class="tab disabled">Backtests (coming)</button>
@@ -142,6 +143,44 @@
           <canvas id="positionPie"></canvas>
         </div>
       </div>
+    </section>
+
+    <!-- ── DECISION ENGINE SECTION ── -->
+    <section id="decisionSection" style="display:none;margin-top:16px;">
+      <div class="card card-controls">
+        <h2 class="card-title">Decision Engine</h2>
+        <p class="card-subtitle">BUY / WATCH / SKIP — 10-point scoring with ATR entry tiers, RSI/MACD signals, and price chart</p>
+        <div class="card-inner">
+          <form id="decisionForm" class="form-grid">
+            <label class="autocomplete-wrapper">
+              <span>Ticker or company name</span>
+              <input id="decisionTicker" type="text" placeholder="NVDA" autocomplete="off" />
+            </label>
+            <label>
+              <span>Investment horizon</span>
+              <select id="decisionMode" style="background:#020617;border:1px solid var(--card-border);border-radius:8px;padding:7px 9px;color:#e5e7eb;font-size:13px;">
+                <option value="short">Short-term trading (weeks to months)</option>
+                <option value="long">Long-term investing (1 year+)</option>
+              </select>
+            </label>
+            <label>
+              <span>Planned holding period</span>
+              <select id="decisionDuration" style="background:#020617;border:1px solid var(--card-border);border-radius:8px;padding:7px 9px;color:#e5e7eb;font-size:13px;">
+                <option value="1 to 4 weeks">1 to 4 weeks</option>
+                <option value="1 to 3 months" selected>1 to 3 months</option>
+                <option value="3 to 6 months">3 to 6 months</option>
+                <option value="6 months to 1 year">6 months to 1 year</option>
+                <option value="1 to 3 years">1 to 3 years</option>
+                <option value="3 to 5 years">3 to 5 years</option>
+                <option value="5 years or more">5 years or more</option>
+              </select>
+            </label>
+            <button id="decisionBtn" type="submit" class="btn-primary">▶ Analyse Stock</button>
+          </form>
+          <div id="decisionError" class="error-box" style="display:none;"></div>
+        </div>
+      </div>
+      <div id="decisionResults" style="margin-top:16px;"></div>
     </section>
 
     <footer class="footer">
