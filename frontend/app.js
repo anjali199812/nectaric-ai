@@ -664,6 +664,205 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
+// ── Decision Engine: Market Pulse helpers ─────────────────────────────────────
+
+function deSparkSVG(vals, w, h) {
+  w = w||82; h = h||28;
+  const clean = (vals||[]).filter(v => v != null && isFinite(v));
+  if (clean.length < 3) return '<span style="color:#4b5563;font-size:10px">—</span>';
+  const mn = Math.min(...clean), mx = Math.max(...clean), rng = mx - mn || 1;
+  const pts = clean.map((v,i) => {
+    const x = 2 + Math.round(i / (clean.length - 1) * (w - 4));
+    const y = 2 + Math.round((1 - (v - mn) / rng) * (h - 4));
+    return x + ',' + y;
+  }).join(' ');
+  const col = clean[clean.length-1] > clean[0] ? '#22c55e'
+            : clean[clean.length-1] < clean[0] ? '#ef4444' : '#0ea5e9';
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function deGaugePct(val, lo, hi) {
+  return Math.max(1, Math.min(99, Math.round((val - lo) / (hi - lo) * 100)));
+}
+
+function deMRow(name, valStr, valCol, gradient, pctPos, spark, hint, zones) {
+  const zHTML = (zones||[]).map(z =>
+    `<span class="de-zchip" style="background:${z.bg};color:${z.fg}">${z.lbl}</span>`
+  ).join('');
+  return `<tr class="de-tr" onclick="this.classList.toggle('open');var dt=this.nextElementSibling;dt.style.display=dt.style.display==='table-row'?'none':'table-row'">
+    <td class="de-name">${name}</td>
+    <td class="de-val" style="color:${valCol}">${valStr}</td>
+    <td class="de-gt"><div class="de-gauge" style="background:${gradient}"><div class="de-mk" style="left:${pctPos}%"></div></div></td>
+    <td class="de-sp">${spark}</td>
+    <td class="de-chev">▼</td>
+  </tr><tr style="display:none"><td colspan="5" class="de-det"><div class="de-zones">${zHTML}</div><div class="de-hint">${hint}</div></td></tr>`;
+}
+
+function deDivRow(label) {
+  return `<tr class="de-divtr"><td colspan="5">${label}</td></tr>`;
+}
+
+function deMetricsHTML(d) {
+  const NO_SPARK = '<span style="color:#4b5563;font-size:10px">—</span>';
+  let techRows = '', fundRows = '';
+
+  if (d.rsi != null) {
+    const p = deGaugePct(d.rsi, 0, 100);
+    const col = d.rsi > 70 ? '#ef4444' : d.rsi < 30 ? '#22c55e' : d.rsi < 55 ? '#0ea5e9' : '#facc15';
+    const grad = 'linear-gradient(90deg,#22c55e 0%,#22c55e 28%,#0ea5e9 50%,#facc15 68%,#ef4444 100%)';
+    const hint = d.rsi > 70 ? 'Overbought. The stock has run hard in a short time — momentum is stretched. Entering here means chasing. Pullback risk is elevated. Wait for RSI to cool below 60 before considering an entry.'
+      : d.rsi < 30 ? 'Oversold. Extreme selling pressure has pushed this metric below 30. This can signal a mean-reversion bounce, but the stock can remain oversold for extended periods. Confirm with price action and volume before acting.'
+      : d.rsi < 55 ? 'Neutral zone — the ideal buying window. Momentum has room to grow without hitting overbought territory. Historically, entries in this range offer the best risk-reward ratio for short-term trades.'
+      : 'Elevated but not yet extreme. Momentum is positive, but the stock has already run partway. New entries here have limited upside room before momentum stalls or reverses.';
+    techRows += deMRow('RSI (14)', d.rsi.toFixed(1), col, grad, p, deSparkSVG(d.hist_rsi), hint, [
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'< 30  Oversold'},
+      {bg:'rgba(14,165,233,.15)',fg:'#0ea5e9', lbl:'30–55  Ideal entry'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'55–70  Elevated'},
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'> 70  Overbought'},
+    ]);
+  }
+
+  if (d.macd_hist != null) {
+    const hist = (d.hist_macd||[]).filter(v => v != null && isFinite(v));
+    const absMax = Math.max(0.001, ...hist.map(Math.abs), Math.abs(d.macd_hist));
+    const p = deGaugePct(d.macd_hist, -absMax, absMax);
+    const col = d.macd_hist > 0 ? '#22c55e' : '#ef4444';
+    const sign = d.macd_hist >= 0 ? '+' : '';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 48%,#22c55e 100%)';
+    const hint = d.macd_hist > 0
+      ? `Histogram is positive (${sign}${d.macd_hist.toFixed(4)}). The MACD line is above its signal line — bullish short-term momentum. Growing bars signal strengthening upside. Watch for bars shrinking: that signals the move is fading before price confirms.`
+      : `Histogram is negative (${d.macd_hist.toFixed(4)}). The MACD line is below its signal line — bearish momentum. A negative histogram getting smaller (less negative) is an early sign of a potential reversal — watch for bars moving toward zero.`;
+    techRows += deMRow('MACD Histogram', sign + d.macd_hist.toFixed(4), col, grad, p, deSparkSVG(d.hist_macd), hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'< 0  Bearish'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'> 0  Bullish'},
+    ]);
+  }
+
+  if (d.vol_ratio != null) {
+    const p = deGaugePct(d.vol_ratio, 0.3, 2.2);
+    const col = d.vol_ratio >= 1.1 ? '#22c55e' : d.vol_ratio >= 0.8 ? '#facc15' : '#ef4444';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 29%,#22c55e 48%,#22c55e 100%)';
+    const hint = d.vol_ratio >= 1.5
+      ? `Very active volume (${d.vol_ratio.toFixed(2)}× average). Significantly more buying or selling than normal — strong conviction. Institutional money is moving. Price moves on high volume are more reliable and more likely to be sustained.`
+      : d.vol_ratio >= 1.1
+      ? `Above-average volume (${d.vol_ratio.toFixed(2)}× average). Buying interest is building. When price rises on increasing volume, the move has conviction behind it.`
+      : d.vol_ratio >= 0.8
+      ? `Normal volume (${d.vol_ratio.toFixed(2)}× average). No special signal — the market is trading this stock at its usual pace. Price moves on average volume are less conclusive.`
+      : `Below-average volume (${d.vol_ratio.toFixed(2)}× average). Low conviction. Price moves on thin volume are more susceptible to reversal and can be misleading as directional signals.`;
+    techRows += deMRow('Volume Ratio (5d/20d)', d.vol_ratio.toFixed(2)+'×', col, grad, p, deSparkSVG(d.hist_vol_ratio), hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'< 0.8  Low'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'0.8–1.1  Normal'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'> 1.1  Active'},
+    ]);
+  }
+
+  if (d.ma50_val != null) {
+    const pma50 = (d.price - d.ma50_val) / d.ma50_val * 100;
+    const p = deGaugePct(pma50, -15, 15);
+    const col = pma50 > 0 ? '#22c55e' : '#ef4444';
+    const sign = pma50 >= 0 ? '+' : '';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 44%,#0ea5e9 50%,#22c55e 100%)';
+    const hint = pma50 > 10
+      ? `Price is ${sign}${pma50.toFixed(1)}% above the 50-day MA ($${d.ma50_val.toFixed(2)}) — extended move. Far above the MA50 often precedes a mean-reversion pullback. The MA50 is your support reference if it drops.`
+      : pma50 > 0
+      ? `Price is ${sign}${pma50.toFixed(1)}% above the MA50 ($${d.ma50_val.toFixed(2)}). Short-term uptrend is intact. The MA50 acts as a dynamic support floor — a pullback to this level would be a healthy, buyable dip.`
+      : pma50 > -10
+      ? `Price is ${pma50.toFixed(1)}% below the MA50 ($${d.ma50_val.toFixed(2)}). The short-term trend has turned negative. The MA50 now acts as overhead resistance — the stock needs to reclaim it to restore bullish momentum.`
+      : `Price is ${pma50.toFixed(1)}% below the MA50 — significantly extended to the downside. Oversold relative to the 50-day trend. Potential bounce zone if RSI and volume confirm, but further weakness is also possible without a catalyst.`;
+    techRows += deMRow('Price vs MA50', sign + pma50.toFixed(1) + '%', col, grad, p, deSparkSVG(d.hist_price_vs_ma50), hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'Below MA50 (bearish)'},
+      {bg:'rgba(14,165,233,.15)',fg:'#0ea5e9', lbl:'At MA50 (neutral)'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'Above MA50 (bullish)'},
+    ]);
+  }
+
+  if (d.revenue_growth_pct != null) {
+    const p = deGaugePct(d.revenue_growth_pct, -20, 30);
+    const col = d.revenue_growth_pct >= 5 ? '#22c55e' : d.revenue_growth_pct >= 0 ? '#facc15' : '#ef4444';
+    const sign = d.revenue_growth_pct >= 0 ? '+' : '';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 44%,#22c55e 66%,#22c55e 100%)';
+    const hint = d.revenue_growth_pct >= 20
+      ? `High-growth company (${sign}${d.revenue_growth_pct.toFixed(1)}% YoY). Revenue is expanding rapidly. This is the core driver of long-term value creation. The key risk is whether this pace can be sustained as the company scales.`
+      : d.revenue_growth_pct >= 5
+      ? `Healthy revenue growth (${sign}${d.revenue_growth_pct.toFixed(1)}% YoY). Business is expanding at a steady pace — enough to support a growth thesis and fund ongoing investment in the business.`
+      : d.revenue_growth_pct >= 0
+      ? `Flat growth (${d.revenue_growth_pct.toFixed(1)}%). The company is not losing ground, but not meaningfully growing either. This is a stability play, not a growth story. Price any premium accordingly.`
+      : `Revenue is shrinking (${d.revenue_growth_pct.toFixed(1)}% YoY). The company is earning less from its core business year over year. A significant red flag — without revenue growth, long-term value creation is structurally challenged.`;
+    fundRows += deMRow('Revenue Growth (YoY)', sign + d.revenue_growth_pct.toFixed(1) + '%', col, grad, p, NO_SPARK, hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'< 0%  Declining'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'0–5%  Flat'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'> 5%  Growing'},
+    ]);
+  }
+
+  if (d.gross_margin_pct != null) {
+    const p = deGaugePct(d.gross_margin_pct, 0, 80);
+    const col = d.gross_margin_pct >= 40 ? '#22c55e' : d.gross_margin_pct >= 20 ? '#facc15' : '#ef4444';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 37%,#22c55e 55%,#22c55e 100%)';
+    const hint = d.gross_margin_pct >= 60
+      ? `Exceptional gross margin (${d.gross_margin_pct.toFixed(0)}%). The company keeps more than half of every revenue dollar after direct costs. This signals strong pricing power, a durable competitive advantage, and significant room for R&D and profit.`
+      : d.gross_margin_pct >= 40
+      ? `Healthy gross margin (${d.gross_margin_pct.toFixed(0)}%). A good portion of revenue remains after costs — enough to fund growth, R&D, and generate profit. Competitive position looks solid.`
+      : d.gross_margin_pct >= 20
+      ? `Moderate gross margin (${d.gross_margin_pct.toFixed(0)}%). Typical of competitive or commoditized businesses. Less room for error if costs rise.`
+      : `Low gross margin (${d.gross_margin_pct.toFixed(0)}%). After making its product, very little revenue remains. Limited pricing power. This business must operate at very high volume to generate meaningful profit.`;
+    fundRows += deMRow('Gross Margin', d.gross_margin_pct.toFixed(0) + '%', col, grad, p, NO_SPARK, hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'< 20%  Low'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'20–40%  Moderate'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'> 40%  Strong'},
+    ]);
+  }
+
+  if (d.peg_val != null) {
+    const p = deGaugePct(d.peg_val, 0, 4);
+    const col = d.peg_val < 1 ? '#22c55e' : d.peg_val <= 2 ? '#facc15' : '#ef4444';
+    const grad = 'linear-gradient(90deg,#22c55e 0%,#22c55e 27%,#facc15 52%,#ef4444 100%)';
+    const hint = d.peg_val < 1
+      ? `Undervalued relative to growth (PEG ${d.peg_val.toFixed(2)}). You are paying less than $1 for every $1 of expected earnings growth. This is the sweet spot — strong growth at a price the market has not yet fully priced in.`
+      : d.peg_val <= 2
+      ? `Fairly valued (PEG ${d.peg_val.toFixed(2)}). The current P/E multiple is in line with the growth rate. Acceptable for a quality business — you are not overpaying, but there is limited valuation upside.`
+      : `Expensive relative to growth (PEG ${d.peg_val.toFixed(2)}). The market is pricing in optimistic future growth that has not yet materialised. The company needs to significantly outperform current estimates just to justify this valuation.`;
+    fundRows += deMRow('PEG Ratio', d.peg_val.toFixed(2), col, grad, p, NO_SPARK, hint, [
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'< 1.0  Undervalued'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'1.0–2.0  Fair value'},
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'> 2.0  Expensive'},
+    ]);
+  }
+
+  const atUp = d.analyst_target ? (d.analyst_target - d.price) / d.price * 100 : null;
+  if (atUp != null) {
+    const p = deGaugePct(atUp, -20, 60);
+    const col = atUp > 10 ? '#22c55e' : atUp > 0 ? '#facc15' : '#ef4444';
+    const sign = atUp >= 0 ? '+' : '';
+    const grad = 'linear-gradient(90deg,#ef4444 0%,#facc15 38%,#0ea5e9 50%,#22c55e 100%)';
+    const hint = atUp > 25
+      ? `Strong analyst consensus upside (${sign}${atUp.toFixed(1)}% to $${d.analyst_target.toFixed(2)}). Analysts see significant room for appreciation. A wide gap between current price and the consensus target is a bullish institutional signal — though targets are revised quarterly.`
+      : atUp > 10
+      ? `Solid analyst upside (${sign}${atUp.toFixed(1)}% to $${d.analyst_target.toFixed(2)}). Analysts see meaningful appreciation potential. The stock has not yet fully priced in analyst expectations.`
+      : atUp > 0
+      ? `Modest analyst upside (${sign}${atUp.toFixed(1)}% to $${d.analyst_target.toFixed(2)}). Analysts are marginally bullish, but the implied return is limited.`
+      : `Price is above analyst target (${sign}${atUp.toFixed(1)}% implied downside to $${d.analyst_target.toFixed(2)}). The stock has outrun the consensus view. Analysts would need to upgrade targets for the current price to be justified.`;
+    fundRows += deMRow('Analyst Price Upside', sign + atUp.toFixed(1) + '%', col, grad, p, NO_SPARK, hint, [
+      {bg:'rgba(239,68,68,.15)', fg:'#ef4444', lbl:'< 0%  Above target'},
+      {bg:'rgba(250,204,21,.15)',fg:'#facc15', lbl:'0–10%  Modest'},
+      {bg:'rgba(34,197,94,.15)', fg:'#22c55e', lbl:'> 10%  Bullish'},
+    ]);
+  }
+
+  if (!techRows && !fundRows) return '';
+  let allRows = '';
+  if (techRows) allRows += deDivRow('TECHNICAL INDICATORS') + techRows;
+  if (fundRows) allRows += deDivRow('FUNDAMENTAL CONTEXT') + fundRows;
+
+  return `<div class="card" style="margin-bottom:14px">
+    <div style="font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+      Market Pulse <span style="font-size:10px;color:#4b5563;font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px">— click any row for interpretation</span>
+    </div>
+    <table class="de-tbl"><tbody>${allRows}</tbody></table>
+  </div>`;
+}
+
+
 // ── Decision Engine render ─────────────────────────────────────────────────────
 
 function deIcon(status) {
@@ -731,41 +930,8 @@ function renderDecision(d) {
     _pendingChart = d;
   }
 
-  // ── Technical signals
-  if (d.rsi !== null && d.rsi !== undefined) {
-    const rsiCol  = d.rsi > 70 ? '#ef4444' : d.rsi < 30 ? '#22c55e' : '#0ea5e9';
-    const macdCol = d.macd_bullish ? '#22c55e' : '#ef4444';
-    const atUp    = d.analyst_target ? ((d.analyst_target - d.price) / d.price * 100).toFixed(1) : null;
-    const atCol   = atUp > 10 ? '#22c55e' : atUp < 0 ? '#ef4444' : '#facc15';
-    R.innerHTML += `
-    <div class="card" style="margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;color:${muted};text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Technical Signals &amp; Analyst Data</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-        <div style="background:${surf};border-radius:8px;padding:12px">
-          <div style="font-size:10px;color:${muted};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">RSI (14)</div>
-          <div style="font-size:26px;font-weight:800;color:${rsiCol}">${Number(d.rsi).toFixed(1)}</div>
-          <div style="font-size:11px;color:${muted};margin-top:3px">${d.rsi>70?'Overbought':d.rsi<30?'Oversold':'Neutral zone'}</div>
-        </div>
-        <div style="background:${surf};border-radius:8px;padding:12px">
-          <div style="font-size:10px;color:${muted};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">MACD Histogram</div>
-          <div style="font-size:20px;font-weight:800;color:${macdCol}">${d.macd_hist !== null ? (d.macd_hist >= 0 ? '+' : '') + Number(d.macd_hist).toFixed(4) : '—'}</div>
-          <div style="font-size:11px;color:${muted};margin-top:3px">${d.macd_bullish ? 'Bullish momentum' : 'Bearish momentum'}</div>
-        </div>
-        ${d.analyst_target ? `
-        <div style="background:${surf};border-radius:8px;padding:12px">
-          <div style="font-size:10px;color:${muted};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Analyst Target</div>
-          <div style="font-size:20px;font-weight:800;color:${atCol}">$${Number(d.analyst_target).toFixed(2)}</div>
-          <div style="font-size:11px;color:${muted};margin-top:3px">${atUp > 0 ? '+' : ''}${atUp}% upside · ${d.analyst_rec}</div>
-        </div>` : `
-        <div style="background:${surf};border-radius:8px;padding:12px">
-          <div style="font-size:10px;color:${muted};text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Bollinger Bands</div>
-          <div style="font-size:13px;font-weight:700;color:#f8fafc">Upper $${d.bb_upper}</div>
-          <div style="font-size:13px;font-weight:700;color:#f8fafc;margin-top:4px">Lower $${d.bb_lower}</div>
-          <div style="font-size:11px;color:${muted};margin-top:3px">Price $${Number(d.price).toFixed(2)}</div>
-        </div>`}
-      </div>
-    </div>`;
-  }
+  // ── Market Pulse (DSR-style metrics table)
+  R.innerHTML += deMetricsHTML(d);
 
   // ── Decision score card
   R.innerHTML += `

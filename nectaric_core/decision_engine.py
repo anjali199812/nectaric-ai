@@ -100,6 +100,14 @@ def _calc_derived(df, price, wk52_high, wk52_low):
     _bb_up  = (_ema20 + 2 * _bb_std).iloc[-1]
     _bb_lo  = (_ema20 - 2 * _bb_std).iloc[-1]
 
+    # ── Historical series for sparklines (last 52 daily points) ──────────
+    def _s(arr, rnd=2):
+        return [round(float(v), rnd) if not np.isnan(v) else None for v in arr.values[-52:]]
+
+    _vr_s  = df['Volume'].rolling(5).mean() / df['Volume'].rolling(20).mean()
+    _ma50s = _c.rolling(50).mean()
+    _pma50 = (_c - _ma50s) / _ma50s * 100
+
     return dict(
         atr          = round(atr, 2),
         wk52_high    = wk52_high,
@@ -119,6 +127,10 @@ def _calc_derived(df, price, wk52_high, wk52_low):
         macd_bullish = macd_bull_val,
         bb_upper     = round(float(_bb_up), 2),
         bb_lower     = round(float(_bb_lo), 2),
+        hist_rsi           = _s(_rsi_s, 1),
+        hist_macd          = _s(_macd_hv, 4),
+        hist_vol_ratio     = _s(_vr_s, 2),
+        hist_price_vs_ma50 = _s(_pma50, 1),
     )
 
 
@@ -793,4 +805,12 @@ def build_response(ticker, d, score, max_pts, factors, mode, duration):
         'chart_close':    d.get('chart_close', []),
         'chart_ma50':     d.get('chart_ma50', []),
         'chart_ma200':    d.get('chart_ma200', []),
+        'revenue_growth_pct': round(d['revenue_growth'] * 100, 1) if d.get('revenue_growth') is not None else None,
+        'gross_margin_pct':   round(d['gross_margin'] * 100, 1)   if d.get('gross_margin')   is not None else None,
+        'peg_val':            d.get('peg'),
+        'ma50_val':           d.get('ma_50d'),
+        'hist_rsi':           d.get('hist_rsi', []),
+        'hist_macd':          d.get('hist_macd', []),
+        'hist_vol_ratio':     d.get('hist_vol_ratio', []),
+        'hist_price_vs_ma50': d.get('hist_price_vs_ma50', []),
     }

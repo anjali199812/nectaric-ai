@@ -499,4 +499,28 @@
   margin-bottom: 6px;
   line-height: 1.4;
 }
- 
+
+/* ── Decision Engine: Market Pulse metrics table ── */
+.de-tbl { width: 100%; border-collapse: collapse; }
+.de-tr { border-bottom: 1px solid #1f2937; cursor: pointer; transition: background .12s; }
+.de-tr:hover { background: rgba(14,165,233,.05); }
+.de-tr:last-child { border-bottom: none; }
+.de-tr td { padding: 9px 8px; vertical-align: middle; }
+.de-divtr td { padding: 5px 8px; font-size: 10px; font-weight: 700; color: #0ea5e9; letter-spacing: .7px; text-transform: uppercase; background: #0f172a; border-top: 1px solid #1f2937; border-bottom: 1px solid #1f2937; }
+.de-name { font-size: 12px; font-weight: 600; color: #f8fafc; width: 148px; white-space: nowrap; }
+.de-val  { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; width: 76px; white-space: nowrap; }
+.de-gt   { width: 165px; }
+.de-gauge { height: 7px; border-radius: 4px; position: relative; }
+.de-mk { position: absolute; top: 50%; width: 2px; height: 13px; background: #fff; border-radius: 1px; transform: translate(-50%,-50%); box-shadow: 0 0 4px rgba(0,0,0,.6); }
+.de-sp   { width: 90px; }
+.de-chev { width: 18px; text-align: right; font-size: 9px; color: #4b5563; transition: transform .2s, color .2s; padding-right: 4px; }
+.de-tr.open .de-chev { transform: rotate(180deg); color: #0ea5e9; }
+.de-det td { padding: 12px 12px 14px 156px; background: #0f172a; border-top: 1px solid #1f2937; }
+.de-zones { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 7px; }
+.de-zchip { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 8px; letter-spacing: .2px; }
+.de-hint  { font-size: 12px; color: #94a3b8; line-height: 1.65; max-width: 560px; }
+@media (max-width: 600px) {
+  .de-sp { display: none; }
+  .de-gt { width: 120px; }
+  .de-det td { padding: 10px; }
+}
